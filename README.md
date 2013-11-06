@@ -49,7 +49,7 @@ s.route('/flock/:id', function(link, method) {
 	link({ href: '/flock/{id}', rel: 'item' });
 
 	method('TICK', function(req, res, ctx) {
-		link({ href: '/flock/'+ctx.id, rel: 'item self' });
+		res.link({ href: '/flock/'+ctx.id, rel: 'item self' });
 
 		var flock = ents.get(ctx.id);
 		if (!flock)
