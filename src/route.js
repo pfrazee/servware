@@ -12,9 +12,13 @@ Route.prototype.link = function(linkObj) {
 
 // Add a method to the route
 // - method: required string|Array(string), the verb(s)
-// - cb: required function, the handler function
 // - opts: optional object, config options for the method behavior
-Route.prototype.method = function(method, cb, opts) {
+//   - opts.stream: bool, does not wait for the request to end before handling if true
+// - cb: required function, the handler function
+Route.prototype.method = function(method, opts, cb) {
+	if (!cb && typeof opts == 'function') {
+		cb = opts; opts = null;
+	}
 	// Handle array version
 	if (Array.isArray(method)) {
 		method.forEach(function(method) { this.method(method, cb, opts); }.bind(this));

@@ -25,7 +25,9 @@ function servware() {
 				var methodHandler = route.methods[req.method];
 				if (methodHandler) {
 					// Run the handler
-					local.promise(true).then(function() {
+					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
+					// ^ if not streaming, wait for body; otherwise, go immediately
+					p.then(function() {
 						return methodHandler.apply(route, args);
 					}).always(function (resData) {
 						if (resData) { writeResponse(res, resData); }

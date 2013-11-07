@@ -157,9 +157,13 @@ Route.prototype.link = function(linkObj) {
 
 // Add a method to the route
 // - method: required string|Array(string), the verb(s)
-// - cb: required function, the handler function
 // - opts: optional object, config options for the method behavior
-Route.prototype.method = function(method, cb, opts) {
+//   - opts.stream: bool, does not wait for the request to end before handling if true
+// - cb: required function, the handler function
+Route.prototype.method = function(method, opts, cb) {
+	if (!cb && typeof opts == 'function') {
+		cb = opts; opts = null;
+	}
 	// Handle array version
 	if (Array.isArray(method)) {
 		method.forEach(function(method) { this.method(method, cb, opts); }.bind(this));
@@ -201,7 +205,9 @@ function servware() {
 				var methodHandler = route.methods[req.method];
 				if (methodHandler) {
 					// Run the handler
-					local.promise(true).then(function() {
+					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
+					// ^ if not streaming, wait for body; otherwise, go immediately
+					p.then(function() {
 						return methodHandler.apply(route, args);
 					}).always(function (resData) {
 						if (resData) { writeResponse(res, resData); }
