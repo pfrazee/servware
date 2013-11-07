@@ -121,3 +121,22 @@ testserver.route('/reqassert', function(link, method) {
 		return 204;
 	});
 });
+
+testserver.route('/links', function(link, method) {
+	link({ href: '/', rel: 'up via service', foo: 'bar' });
+	link({ href: '/link', rel: 'self service' });
+	link({ href: 'http://grimwire.com', rel: 'service', title: 'best site in world of web' });
+
+	method('ROUTELINKS', function(req, res) {
+		return 200;
+	});
+	method('METHODLINKS1', function(req, res) {
+		res.link({ href: '/foo', rel: 'item', title: 'method link' });
+		return 200;
+	});
+	method('METHODLINKS2', function(req, res) {
+		res.link({ href: '/bar', rel: 'item', title: 'method link 1' });
+		res.link({ href: '/baz', rel: 'item', title: 'method link 2' });
+		return 200;
+	});
+});

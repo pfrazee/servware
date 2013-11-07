@@ -1,5 +1,5 @@
 function mixin(request) {
-	request.assert = req_assert;
+	Object.defineProperty(request, 'assert', { value: req_assert, enumerable: false });
 }
 
 function req_assert(desc) {

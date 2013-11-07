@@ -54,7 +54,7 @@ module.exports.reasons = {
 };
 },{}],2:[function(require,module,exports){
 function mixin(request) {
-	request.assert = req_assert;
+	Object.defineProperty(request, 'assert', { value: req_assert, enumerable: false });
 }
 
 function req_assert(desc) {
@@ -132,7 +132,21 @@ function asArray(v) {
 module.exports = mixin;
 },{}],3:[function(require,module,exports){
 function mixin(response) {
+	Object.defineProperty(response, 'link', { value: res_link, enumerable: false });
+}
 
+// Adds a link to the response
+// - linkObj: required object|Array(object)
+function res_link(linkObj) {
+	// Handle array version
+	if (Array.isArray(linkObj)) {
+		linkObj.forEach(function(link) { this.link(link); }.bind(this));
+		return;
+	}
+
+	// Add link
+	if (!this.headers.link) { this.headers.link = []; }
+	this.headers.link.push(linkObj);
 }
 
 module.exports = mixin;
@@ -198,12 +212,17 @@ function servware() {
 				var route = routes[path];
 				var methodHandler = route.methods[req.method];
 				if (methodHandler) {
-					// Run the handler
+					// Pull route links into response
+					if (route.links.length) {
+						res.setHeader('link', route.links.slice(0));
+					}
+					// If not streaming, wait for body; otherwise, go immediately
 					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
-					// ^ if not streaming, wait for body; otherwise, go immediately
 					p.then(function() {
+						// Run the handler
 						return methodHandler.apply(route, args);
 					}).always(function (resData) {
+						// Fill the response, if needed
 						if (resData) { writeResponse(res, resData); }
 					});
 					return;

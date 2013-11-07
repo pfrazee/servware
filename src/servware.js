@@ -24,12 +24,17 @@ function servware() {
 				var route = routes[path];
 				var methodHandler = route.methods[req.method];
 				if (methodHandler) {
-					// Run the handler
+					// Pull route links into response
+					if (route.links.length) {
+						res.setHeader('link', route.links.slice(0));
+					}
+					// If not streaming, wait for body; otherwise, go immediately
 					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
-					// ^ if not streaming, wait for body; otherwise, go immediately
 					p.then(function() {
+						// Run the handler
 						return methodHandler.apply(route, args);
 					}).always(function (resData) {
+						// Fill the response, if needed
 						if (resData) { writeResponse(res, resData); }
 					});
 					return;
