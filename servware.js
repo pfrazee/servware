@@ -50,13 +50,7 @@ module.exports.reasons = {
     "504": "Gateway Time-out",
     "505": "HTTP Version Not Supported",
     "507": "Insufficient Storage",
-    "511": "Network Authentication Required",
-    "1xx": "**Informational**",
-    "2xx": "**Successful**",
-    "3xx": "**Redirection**",
-    "4xx": "**Client Error**",
-    "5xx": "**Server Error**",
-    "7xx": "**Developer Error**"
+    "511": "Network Authentication Required"
 };
 },{}],2:[function(require,module,exports){
 function mixin(request) {
@@ -107,7 +101,7 @@ var body_validators = {
 	},
 	'defined': function(req, params) {
 		params.forEach(function(param) {
-			if (typeof req.body[param] !== 'undefined') {
+			if (typeof req.body[param] == 'undefined') {
 				throw { status: 422, reason: 'bad ent - `'+param+'` must not be undefined' };
 			}
 		});

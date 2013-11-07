@@ -46,7 +46,7 @@ var body_validators = {
 	},
 	'defined': function(req, params) {
 		params.forEach(function(param) {
-			if (typeof req.body[param] !== 'undefined') {
+			if (typeof req.body[param] == 'undefined') {
 				throw { status: 422, reason: 'bad ent - `'+param+'` must not be undefined' };
 			}
 		});

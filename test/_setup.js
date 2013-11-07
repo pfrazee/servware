@@ -81,3 +81,32 @@ testserver.route('/opts/stream', function(link, method) {
 		});
 	});
 });
+
+testserver.route('/reqassert', function(link, method) {
+	method('ACCEPT1', function(req, res) {
+		req.assert({ accept: 'text/html' });
+		return 204;
+	});
+	method('ACCEPT2', function(req, res) {
+		req.assert({ accept: ['text/html', 'application/json'] });
+		return 204;
+	});
+	method('TYPE', function(req, res) {
+		req.assert({ type: 'application/json' });
+		return 204;
+	});
+	method('BODY', function(req, res) {
+		req.assert({
+			body: {
+				'string': 'a',
+				'number': 'b',
+				'boolean': ['c', 'd'],
+				'object': ['e', 'f'],
+				'notnull': ['e', 'g'],
+				'defined': 'h',
+				'truthy': ['i', 'j', 'k', 'l']
+			}
+		});
+		return 204;
+	});
+});

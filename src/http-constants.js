@@ -49,11 +49,5 @@ module.exports.reasons = {
     "504": "Gateway Time-out",
     "505": "HTTP Version Not Supported",
     "507": "Insufficient Storage",
-    "511": "Network Authentication Required",
-    "1xx": "**Informational**",
-    "2xx": "**Successful**",
-    "3xx": "**Redirection**",
-    "4xx": "**Client Error**",
-    "5xx": "**Server Error**",
-    "7xx": "**Developer Error**"
+    "511": "Network Authentication Required"
 };
