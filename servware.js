@@ -235,7 +235,7 @@ function servware() {
 	};
 	serverFn.route = function(path, defineFn) {
 		// Create the regex to do path routing
-		var regex = new RegExp(path, 'i');
+		var regex = new RegExp('^'+path+'$', 'i');
 		regex.path = path; // store so we can find the route on match
 		routeRegexes.push(regex);
 
@@ -275,7 +275,7 @@ function writeResponse(res, data) {
 	}
 
 	// Set default content-type ifneeded
-	if (body && !head[2]['content-type']) {
+	if (typeof body != 'undefined' && !head[2]['content-type']) {
 		head[2]['content-type'] = (typeof body == 'string') ? 'text/plain' : 'application/json';
 	}
 

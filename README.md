@@ -43,7 +43,7 @@ s.route('/flock/new', function(link, method) {
 	});
 });
 
-s.route('/flock/[a-z]+', function(link, method) {
+s.route('/flock/([a-z]+)', function(link, method) {
 	link({ href: '/', rel: 'service via' });
 	link({ href: '/flock', rel: 'collection up' });
 	link({ href: '/flock/{id}', rel: 'item' });
