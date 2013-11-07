@@ -19,7 +19,7 @@ function servware() {
 			var match = routeRegexes[i].exec(req.path);
 			if (match) {
 				// Match the method
-				req.pathArgs = match;
+				req.pathArgs = match.slice(1);
 				var path = routeRegexes[i].path;
 				var route = routes[path];
 				var methodHandler = route.methods[req.method];
@@ -34,11 +34,11 @@ function servware() {
 					});
 					return;
 				} else {
-					return res.writeHead(405, 'bad method').end();
+					return res.writeHead(405, reasons[405]).end();
 				}
 			}
 		}
-		res.writeHead(404, 'not found').end();
+		res.writeHead(404, reasons[404]).end();
 	};
 	serverFn.route = function(path, defineFn) {
 		// Create the regex to do path routing

@@ -1,6 +1,36 @@
 var testserver = servware();
 local.addServer('test', testserver);
 
+testserver.route('/route/str/([a-z]+)', function(link, method) {
+	method('GET', function(req, res) {
+		return [200, req.pathArgs[0]];
+	});
+});
+testserver.route('/route/num/([0-9]+)', function(link, method) {
+	method('GET', function(req, res) {
+		return [200, req.pathArgs[0]];
+	});
+});
+
+testserver.route('/opts/stream', function(link, method) {
+	method('YES', { stream: true }, function(req, res) {
+		res.writeHead(200, 'ok', { 'content-type': 'text/plain' });
+		res.write('header:'+req.body+';');
+		req.body_.then(function(body) {
+			res.write('body:'+body);
+			res.end();
+		});
+	});
+	method('NO', function(req, res) {
+		res.writeHead(200, 'ok', { 'content-type': 'text/plain' });
+		res.write('header:'+req.body+';');
+		req.body_.then(function(body) {
+			res.write('body:'+body);
+			res.end();
+		});
+	});
+});
+
 testserver.route('/success', function(link, method) {
 	method('GETNUM', function(req, res) { return 204; });
 	method('GETARRAY1', function(req, res) { return [200, 'hello, world']; });
@@ -60,25 +90,6 @@ testserver.route('/failure', function(link, method) {
 	});
 	method('GETMANUAL', function(req, res) {
 		res.writeHead(500, 'internal error').end();
-	});
-});
-
-testserver.route('/opts/stream', function(link, method) {
-	method('YES', { stream: true }, function(req, res) {
-		res.writeHead(200, 'ok', { 'content-type': 'text/plain' });
-		res.write('header:'+req.body+';');
-		req.body_.then(function(body) {
-			res.write('body:'+body);
-			res.end();
-		});
-	});
-	method('NO', function(req, res) {
-		res.writeHead(200, 'ok', { 'content-type': 'text/plain' });
-		res.write('header:'+req.body+';');
-		req.body_.then(function(body) {
-			res.write('body:'+body);
-			res.end();
-		});
 	});
 });
 
