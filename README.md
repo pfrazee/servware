@@ -43,15 +43,16 @@ s.route('/flock/new', function(link, method) {
 	});
 });
 
-s.route('/flock/:id', function(link, method) {
+s.route('/flock/[a-z]+', function(link, method) {
 	link({ href: '/', rel: 'service via' });
 	link({ href: '/flock', rel: 'collection up' });
 	link({ href: '/flock/{id}', rel: 'item' });
 
-	method('TICK', function(req, res, ctx) {
-		res.link({ href: '/flock/'+ctx.id, rel: 'item self' });
+	method('TICK', function(req, res) {
+		var id = req.pathArgs[0];
+		res.link({ href: '/flock/'+id, rel: 'item self' });
 
-		var flock = ents.get(ctx.id);
+		var flock = ents.get(id);
 		if (!flock)
 			throw 404;
 
