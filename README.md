@@ -6,7 +6,7 @@ A server framework in development for Local.js. If possible, will also support N
 Aiming for something along these lines:
 
 ```javascript
-var s = new Servware();
+var s = servware();
 
 s.route('/flock', function(link, method) {
 	link({ href: '/', rel: 'service up via' });
