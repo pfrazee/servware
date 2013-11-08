@@ -59,3 +59,46 @@ wait(function () { return done; });
 success
 {body: "", headers: {}, reason: "Method Not Allowed", status: 405}
 */
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET', url: 'httpl://test/route/tokens/a' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{body: "a", headers: {"content-type": "text/plain"}, reason: "OK", status: 200}
+*/
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET', url: 'httpl://test/route/tokens/a/b' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{
+  body: "a & b",
+  headers: {"content-type": "text/plain"},
+  reason: "OK",
+  status: 200
+}
+*/
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET', url: 'httpl://test/route/tokens/a/group/b' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{
+  body: "a & b",
+  headers: {"content-type": "text/plain"},
+  reason: "OK",
+  status: 200
+}
+*/

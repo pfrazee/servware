@@ -209,12 +209,17 @@ function servware() {
 				// Match the method
 				req.pathArgs = match.slice(1);
 				var path = routeRegexes[i].path;
+				var pathTokenMap = routeRegexes[i].tokenMap;
 				var route = routes[path];
 				var methodHandler = route.methods[req.method];
 				if (methodHandler) {
 					// Pull route links into response
 					if (route.links.length) {
 						res.setHeader('link', route.links.slice(0));
+					}
+					// Add tokens to pathArgs
+					for (var k in pathTokenMap) {
+						req.pathArgs[pathTokenMap[k]] = req.pathArgs[k];
 					}
 					// If not streaming, wait for body; otherwise, go immediately
 					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
@@ -234,9 +239,14 @@ function servware() {
 		res.writeHead(404, reasons[404]).end();
 	};
 	serverFn.route = function(path, defineFn) {
+		// Parse named tokens and create a token map
+		var pathTokenMap = {}; // regex match index -> token name (eg {0: 'section', 1: 'id'})
+		path = parsePathTokens(path, pathTokenMap);
+
 		// Create the regex to do path routing
 		var regex = new RegExp('^'+path+'$', 'i');
 		regex.path = path; // store so we can find the route on match
+		regex.tokenMap = pathTokenMap; // store so we can assign values to tokens on match
 		routeRegexes.push(regex);
 
 		// Create the route object
@@ -282,6 +292,19 @@ function writeResponse(res, data) {
 	// Write response
 	res.writeHead.apply(res, head);
 	res.end(body);
+}
+
+function parsePathTokens(path, tokenMap) {
+	// Extract the tokens in their positions within the regex match (less 1, because we drop the first value in the match array)
+	var i=0, match, re = /(:([^\/]*))|\(.+\)/g;
+	while ((match = re.exec(path))) {
+		if (match[0].charAt(0) == ':') { // token or just a regex group?
+			tokenMap[i] = match[2]; // map the position to the token name
+		}
+		i++;
+	}
+	// Replace tokens with standard path part groups
+	return path.replace(/(:[^\/]*)/g, '([^/]*)');
 }
 
 window.servware = servware;

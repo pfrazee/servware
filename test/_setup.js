@@ -11,6 +11,21 @@ testserver.route('/route/num/([0-9]+)', function(link, method) {
 		return [200, req.pathArgs[0]];
 	});
 });
+testserver.route('/route/tokens/:foo', function(link, method) {
+	method('GET', function(req, res) {
+		return [200, req.pathArgs.foo];
+	});
+});
+testserver.route('/route/tokens/:foo/:bar', function(link, method) {
+	method('GET', function(req, res) {
+		return [200, req.pathArgs.foo + ' & ' + req.pathArgs.bar];
+	});
+});
+testserver.route('/route/tokens/:foo/(group)/:bar', function(link, method) {
+	method('GET', function(req, res) {
+		return [200, req.pathArgs.foo + ' & ' + req.pathArgs.bar];
+	});
+});
 
 testserver.route('/opts/stream', function(link, method) {
 	method('YES', { stream: true }, function(req, res) {
