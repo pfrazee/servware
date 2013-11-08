@@ -102,3 +102,35 @@ success
   status: 200
 }
 */
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET1', url: 'httpl://test/route/middleware' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{
+  body: "bar",
+  headers: {"content-type": "text/plain"},
+  reason: "OK",
+  status: 200
+}
+*/
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET2', url: 'httpl://test/route/middleware' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{
+  body: "baz",
+  headers: {"content-type": "text/plain"},
+  reason: "OK",
+  status: 200
+}
+*/

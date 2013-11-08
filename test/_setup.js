@@ -26,6 +26,28 @@ testserver.route('/route/tokens/:foo/(group)/:bar', function(link, method) {
 		return [200, req.pathArgs.foo + ' & ' + req.pathArgs.bar];
 	});
 });
+testserver.route('/route/middleware', function(link, method) {
+	method('GET1',
+		function(req, res) {
+			req.foo = 'bar';
+			return true;
+		},
+		function(req, res) {
+			return [200, req.foo];
+		}
+	);
+	method('GET2',
+		function(req, res) {
+			var p = local.promise();
+			req.foo = 'baz';
+			setTimeout(function() { p.fulfill(true); }, 10);
+			return p;
+		},
+		function(req, res) {
+			return [200, req.foo];
+		}
+	);
+});
 
 testserver.route('/opts/stream', function(link, method) {
 	method('YES', { stream: true }, function(req, res) {

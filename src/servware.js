@@ -23,8 +23,8 @@ function servware() {
 				var path = routeRegexes[i].path;
 				var pathTokenMap = routeRegexes[i].tokenMap;
 				var route = routes[path];
-				var methodHandler = route.methods[req.method];
-				if (methodHandler) {
+				var methodHandlers = route.methods[req.method];
+				if (methodHandlers) {
 					// Add tokens to pathArgs
 					for (var k in pathTokenMap) {
 						req.pathArgs[pathTokenMap[k]] = req.pathArgs[k];
@@ -47,14 +47,26 @@ function servware() {
 					}, configurable: true });
 
 					// If not streaming, wait for body; otherwise, go immediately
-					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
+					var handlerIndex = 0;
+					var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
 					p.then(function() {
 						// Run the handler
-						return methodHandler.apply(route, args);
-					}).always(function (resData) {
-						// Fill the response, if needed
-						if (resData) { writeResponse(res, resData); }
-					});
+						return methodHandlers[handlerIndex].apply(route, args);
+					}).always(handleReturn);
+					function handleReturn (resData) {
+						// Go to the next handler if given true (the middleware signal)
+						if (resData === true) {
+							handlerIndex++;
+							if (!methodHandlers[handlerIndex]) {
+								console.error('Route handler returned true but no further handlers were available');
+								return res.writeHead(500, reasons[500]).end();
+							}
+							local.promise(methodHandlers[handlerIndex].apply(route, args)).always(handleReturn);
+						} else {
+							// Fill the response, if needed
+							if (resData) { writeResponse(res, resData); }
+						}
+					}
 					return;
 				} else {
 					return res.writeHead(405, reasons[405]).end();

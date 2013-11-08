@@ -14,21 +14,25 @@ Route.prototype.link = function(linkObj) {
 // - method: required string|Array(string), the verb(s)
 // - opts: optional object, config options for the method behavior
 //   - opts.stream: bool, does not wait for the request to end before handling if true
-// - cb: required function, the handler function
-Route.prototype.method = function(method, opts, cb) {
-	if (!cb && typeof opts == 'function') {
-		cb = opts; opts = null;
-	}
-	// Handle array version
+// - cb*: required functions, the handler functions
+Route.prototype.method = function() {
+	var method = arguments[0];
 	if (Array.isArray(method)) {
-		method.forEach(function(method) { this.method(method, cb, opts); }.bind(this));
+		var args = Array.prototype.slice.call(arguments, 1);
+		method.forEach(function(method) { this.method.apply(this, [method].concat(args)); }.bind(this));
 		return;
 	}
+
+	// Extract arguments
+	var opts = (typeof arguments[1] == 'object') ? arguments[1] : null;
+	var hindex = opts ? 2 : 1;
+	var handlers = Array.prototype.slice.call(arguments, hindex);
+
 	// Mix in options
 	for (var k in opts) {
-		cb[k] = opts[k];
+		handlers[k] = opts[k];
 	}
-	this.methods[method] = cb;
+	this.methods[method] = handlers;
 };
 
 module.exports = Route;

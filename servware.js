@@ -167,21 +167,25 @@ Route.prototype.link = function(linkObj) {
 // - method: required string|Array(string), the verb(s)
 // - opts: optional object, config options for the method behavior
 //   - opts.stream: bool, does not wait for the request to end before handling if true
-// - cb: required function, the handler function
-Route.prototype.method = function(method, opts, cb) {
-	if (!cb && typeof opts == 'function') {
-		cb = opts; opts = null;
-	}
-	// Handle array version
+// - cb*: required functions, the handler functions
+Route.prototype.method = function() {
+	var method = arguments[0];
 	if (Array.isArray(method)) {
-		method.forEach(function(method) { this.method(method, cb, opts); }.bind(this));
+		var args = Array.prototype.slice.call(arguments, 1);
+		method.forEach(function(method) { this.method.apply(this, [method].concat(args)); }.bind(this));
 		return;
 	}
+
+	// Extract arguments
+	var opts = (typeof arguments[1] == 'object') ? arguments[1] : null;
+	var hindex = opts ? 2 : 1;
+	var handlers = Array.prototype.slice.call(arguments, hindex);
+
 	// Mix in options
 	for (var k in opts) {
-		cb[k] = opts[k];
+		handlers[k] = opts[k];
 	}
-	this.methods[method] = cb;
+	this.methods[method] = handlers;
 };
 
 module.exports = Route;
@@ -211,8 +215,8 @@ function servware() {
 				var path = routeRegexes[i].path;
 				var pathTokenMap = routeRegexes[i].tokenMap;
 				var route = routes[path];
-				var methodHandler = route.methods[req.method];
-				if (methodHandler) {
+				var methodHandlers = route.methods[req.method];
+				if (methodHandlers) {
 					// Add tokens to pathArgs
 					for (var k in pathTokenMap) {
 						req.pathArgs[pathTokenMap[k]] = req.pathArgs[k];
@@ -235,14 +239,26 @@ function servware() {
 					}, configurable: true });
 
 					// If not streaming, wait for body; otherwise, go immediately
-					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
+					var handlerIndex = 0;
+					var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
 					p.then(function() {
 						// Run the handler
-						return methodHandler.apply(route, args);
-					}).always(function (resData) {
-						// Fill the response, if needed
-						if (resData) { writeResponse(res, resData); }
-					});
+						return methodHandlers[handlerIndex].apply(route, args);
+					}).always(handleReturn);
+					function handleReturn (resData) {
+						// Go to the next handler if given true (the middleware signal)
+						if (resData === true) {
+							handlerIndex++;
+							if (!methodHandlers[handlerIndex]) {
+								console.error('Route handler returned true but no further handlers were available');
+								return res.writeHead(500, reasons[500]).end();
+							}
+							local.promise(methodHandlers[handlerIndex].apply(route, args)).always(handleReturn);
+						} else {
+							// Fill the response, if needed
+							if (resData) { writeResponse(res, resData); }
+						}
+					}
 					return;
 				} else {
 					return res.writeHead(405, reasons[405]).end();
