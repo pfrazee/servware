@@ -155,6 +155,9 @@ function Route(path) {
 	this.path = path;
 	this.links = [];
 	this.methods = {};
+
+	// Set a default HEAD method
+	this.method('HEAD', function() { return 204; });
 }
 
 // Add a link to all responses in the route
@@ -210,11 +213,13 @@ function servware() {
 		for (var i=0; i < routeRegexes.length; i++) {
 			var match = routeRegexes[i].exec(req.path);
 			if (match) {
-				// Match the method
+				// Extract params
 				req.pathArgs = match.slice(1);
 				var path = routeRegexes[i].path;
 				var pathTokenMap = routeRegexes[i].tokenMap;
 				var route = routes[path];
+
+				// Match the method
 				var methodHandlers = route.methods[req.method];
 				if (methodHandlers) {
 					// Add tokens to pathArgs

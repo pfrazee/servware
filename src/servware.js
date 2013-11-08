@@ -18,11 +18,13 @@ function servware() {
 		for (var i=0; i < routeRegexes.length; i++) {
 			var match = routeRegexes[i].exec(req.path);
 			if (match) {
-				// Match the method
+				// Extract params
 				req.pathArgs = match.slice(1);
 				var path = routeRegexes[i].path;
 				var pathTokenMap = routeRegexes[i].tokenMap;
 				var route = routes[path];
+
+				// Match the method
 				var methodHandlers = route.methods[req.method];
 				if (methodHandlers) {
 					// Add tokens to pathArgs

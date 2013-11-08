@@ -2,6 +2,9 @@ function Route(path) {
 	this.path = path;
 	this.links = [];
 	this.methods = {};
+
+	// Set a default HEAD method
+	this.method('HEAD', function() { return 204; });
 }
 
 // Add a link to all responses in the route

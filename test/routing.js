@@ -62,6 +62,17 @@ success
 
 done = false;
 startTime = Date.now();
+var res = local.dispatch({ method: 'HEAD', url: 'httpl://test/route/str/foo' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{body: "", headers: {}, reason: "No Content", status: 204}
+*/
+
+done = false;
+startTime = Date.now();
 var res = local.dispatch({ method: 'GET', url: 'httpl://test/route/tokens/a' });
 res.then(printSuccess, printError).always(finishTest);
 wait(function () { return done; });
