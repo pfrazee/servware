@@ -53,3 +53,22 @@ success
   status: 200
 }
 */
+
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET', url: 'httpl://test/links/a/b' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{
+  body: "",
+  headers: {
+    link: "</a>; rel=\"up via service\"; id=\"a\", </a/b>; rel=\"self item\"; foo=\"a\"; id=\"b\""
+  },
+  reason: "OK",
+  status: 200
+}
+*/

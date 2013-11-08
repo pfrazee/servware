@@ -155,3 +155,9 @@ testserver.route('/links', function(link, method) {
 		return 200;
 	});
 });
+
+testserver.route('/links/:foo/:bar', function(link, method) {
+	link({ href: '/:foo', rel: 'up via service', id: ':foo' });
+	link({ href: '/:foo/:bar', rel: 'self item', foo: ':foo', id: ':bar' });
+	method('GET', function(req, res) { return 200; });
+});

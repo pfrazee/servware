@@ -25,14 +25,27 @@ function servware() {
 				var route = routes[path];
 				var methodHandler = route.methods[req.method];
 				if (methodHandler) {
-					// Pull route links into response
-					if (route.links.length) {
-						res.setHeader('link', route.links.slice(0));
-					}
 					// Add tokens to pathArgs
 					for (var k in pathTokenMap) {
 						req.pathArgs[pathTokenMap[k]] = req.pathArgs[k];
 					}
+
+					// Pull route links into response
+					if (route.links.length) {
+						res.setHeader('link', route.links.slice(0));
+					}
+
+					// Patch serializeHeaders() to replace path tokens
+					var orgSeralizeHeaders = res.serializeHeaders;
+					Object.defineProperty(res, 'serializeHeaders', { value: function() {
+						orgSeralizeHeaders.call(this);
+						if (!this.headers.link) return;
+						for (var k in pathTokenMap) {
+							var token = ':'+pathTokenMap[k];
+							this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.pathArgs[k]);
+						}
+					}, configurable: true });
+
 					// If not streaming, wait for body; otherwise, go immediately
 					var p = (!methodHandler.stream) ? req.body_ : local.promise(true);
 					p.then(function() {
