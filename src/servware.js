@@ -48,13 +48,7 @@ function servware() {
 						}
 					}, configurable: true });
 
-					// If not streaming, wait for body; otherwise, go immediately
-					var handlerIndex = 0;
-					var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
-					p.then(function() {
-						// Run the handler
-						return methodHandlers[handlerIndex].apply(route, args);
-					}).always(handleReturn);
+					// Define post-handler behavior
 					function handleReturn (resData) {
 						// Go to the next handler if given true (the middleware signal)
 						if (resData === true) {
@@ -69,6 +63,14 @@ function servware() {
 							if (resData) { writeResponse(res, resData); }
 						}
 					}
+
+					// If not streaming, wait for body; otherwise, go immediately
+					var handlerIndex = 0;
+					var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
+					p.then(function() {
+						// Run the handler
+						return methodHandlers[handlerIndex].apply(route, args);
+					}).always(handleReturn);
 					return;
 				} else {
 					return res.writeHead(405, reasons[405]).end();
