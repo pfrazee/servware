@@ -63,7 +63,8 @@ function req_assert(desc) {
 		throw 406;
 	}
 	// Request content-type
-	if (desc.type && this.headers['content-type'] != desc.type) {
+	if (desc.type && !Array.isArray(desc.type)) { desc.type = [desc.type]; }
+	if (desc.type && desc.type.indexOf(this.headers['content-type']) === -1) {
 		throw 415;
 	}
 	if (desc.body) {
@@ -252,7 +253,7 @@ function servware() {
 								console.error('Route handler returned true but no further handlers were available');
 								return res.writeHead(500, reasons[500]).end();
 							}
-							local.promise(methodHandlers[handlerIndex].apply(route, args)).always(handleReturn);
+							local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
 						} else {
 							// Fill the response, if needed
 							if (resData) { writeResponse(res, resData); }

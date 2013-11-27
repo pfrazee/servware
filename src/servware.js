@@ -57,7 +57,7 @@ function servware() {
 								console.error('Route handler returned true but no further handlers were available');
 								return res.writeHead(500, reasons[500]).end();
 							}
-							local.promise(methodHandlers[handlerIndex].apply(route, args)).always(handleReturn);
+							local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
 						} else {
 							// Fill the response, if needed
 							if (resData) { writeResponse(res, resData); }

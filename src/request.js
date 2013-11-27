@@ -8,7 +8,8 @@ function req_assert(desc) {
 		throw 406;
 	}
 	// Request content-type
-	if (desc.type && this.headers['content-type'] != desc.type) {
+	if (desc.type && !Array.isArray(desc.type)) { desc.type = [desc.type]; }
+	if (desc.type && desc.type.indexOf(this.headers['content-type']) === -1) {
 		throw 415;
 	}
 	if (desc.body) {
