@@ -3,6 +3,8 @@ Servware
 
 A server framework in development for Local.js. If possible, will also support Node.js.
 
+**I'll try to get some proper docs in here soon.**
+
 Aiming for something along these lines:
 
 ```javascript
