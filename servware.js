@@ -321,13 +321,20 @@ function writeResponse(res, data) {
 		throw new Error('Unusuable response given');
 	}
 
-	// Set default content-type ifneeded
+	// Fall back to headers from the response object if present
+	for (var k in res.headers) {
+		head[2][k] = head[2][k] || res.headers[k];
+	}
+
+	// Set default content-type if needed
 	if (typeof body != 'undefined' && !head[2]['content-type']) {
 		head[2]['content-type'] = (typeof body == 'string') ? 'text/plain' : 'application/json';
 	}
 
 	// Write response
-	res.writeHead.apply(res, head);
+	if (!res.status) {
+		res.writeHead.apply(res, head);
+	}
 	res.end(body);
 }
 
@@ -344,6 +351,6 @@ function parsePathTokens(path, tokenMap) {
 	return path.replace(/(:[^\/]*)/g, '([^/]*)');
 }
 
-window.servware = servware;
+(typeof window == 'undefined' ? self : window).servware = servware;
 },{"./http-constants":1,"./request":2,"./response":3,"./route":4}]},{},[5])
 ;
