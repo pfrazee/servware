@@ -34,7 +34,7 @@ function servware() {
 
 					// Pull route links into response
 					if (route.links.length) {
-						res.setHeader('link', route.links.slice(0));
+						res.setHeader('link', local.util.deepClone(route.links));
 					}
 
 					// Patch serializeHeaders() to replace path tokens

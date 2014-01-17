@@ -176,6 +176,17 @@ testserver.route('/links', function(link, method) {
 		res.link({ href: '/baz', rel: 'item', title: 'method link 2' });
 		return 200;
 	});
+	method('MODLINKS1', function(req, res) {
+		res.modlinks({ rel: 'service' }, { title: 'All titles are this' });
+		res.modlinks({ foo: 'bar' }, { foo: 'baz' });
+		return 200;
+	});
+	method('MODLINKS2', function(req, res) {
+		res.modlinks({ rel: 'service' }, function(link) {
+			if (link.foo == 'bar') link.title = 'Just this title is this';
+		});
+		return 200;
+	});
 });
 
 testserver.route('/links/:foo/:bar', function(link, method) {
