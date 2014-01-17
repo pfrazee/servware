@@ -3,27 +3,27 @@ local.addServer('test', testserver);
 
 testserver.route('/route/str/([a-z]+)', function(link, method) {
 	method('GET', function(req, res) {
-		return [200, req.pathArgs[0]];
+		return [200, req.params[0]];
 	});
 });
-testserver.route('/route/num/([0-9]+)', function(link, method) {
+testserver.route(/^\/route\/num\/([0-9]+)$/, function(link, method) {
 	method('GET', function(req, res) {
-		return [200, req.pathArgs[0]];
+		return [200, req.params[0]];
 	});
 });
 testserver.route('/route/tokens/:foo', function(link, method) {
 	method('GET', function(req, res) {
-		return [200, req.pathArgs.foo];
+		return [200, req.params.foo];
 	});
 });
 testserver.route('/route/tokens/:foo/:bar', function(link, method) {
 	method('GET', function(req, res) {
-		return [200, req.pathArgs.foo + ' & ' + req.pathArgs.bar];
+		return [200, req.params.foo + ' & ' + req.params.bar];
 	});
 });
 testserver.route('/route/tokens/:foo/(group)/:bar', function(link, method) {
 	method('GET', function(req, res) {
-		return [200, req.pathArgs.foo + ' & ' + req.pathArgs.bar];
+		return [200, req.params.foo + ' & ' + req.params.bar];
 	});
 });
 testserver.route('/route/middleware', function(link, method) {

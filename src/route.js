@@ -1,5 +1,6 @@
-function Route(path) {
+function Route(path, pathTokenMap) {
 	this.path = path;
+	this.pathTokenMap = pathTokenMap;
 	this.links = [];
 	this.methods = {};
 

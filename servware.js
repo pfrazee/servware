@@ -172,8 +172,9 @@ function res_modlinks(query, update) {
 
 module.exports = mixin;
 },{}],4:[function(require,module,exports){
-function Route(path) {
+function Route(path, pathTokenMap) {
 	this.path = path;
+	this.pathTokenMap = pathTokenMap;
 	this.links = [];
 	this.methods = {};
 
@@ -235,17 +236,16 @@ function servware() {
 			var match = routeRegexes[i].exec(req.path);
 			if (match) {
 				// Extract params
-				req.pathArgs = match.slice(1);
-				var path = routeRegexes[i].path;
-				var pathTokenMap = routeRegexes[i].tokenMap;
-				var route = routes[path];
+				req.params = match.slice(1);
+				var route = routes[routeRegexes[i]];
+				var pathTokenMap = route.pathTokenMap;
 
 				// Match the method
 				var methodHandlers = route.methods[req.method];
 				if (methodHandlers) {
-					// Add tokens to pathArgs
+					// Add tokens to params
 					for (var k in pathTokenMap) {
-						req.pathArgs[pathTokenMap[k]] = req.pathArgs[k];
+						req.params[pathTokenMap[k]] = req.params[k];
 					}
 
 					// Pull route links into response
@@ -260,7 +260,7 @@ function servware() {
 						if (!this.headers.link) return;
 						for (var k in pathTokenMap) {
 							var token = ':'+pathTokenMap[k];
-							this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.pathArgs[k]);
+							this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
 						}
 					}, configurable: true });
 
@@ -296,19 +296,21 @@ function servware() {
 		res.writeHead(404, reasons[404]).end();
 	};
 	serverFn.route = function(path, defineFn) {
-		// Parse named tokens and create a token map
 		var pathTokenMap = {}; // regex match index -> token name (eg {0: 'section', 1: 'id'})
-		path = parsePathTokens(path, pathTokenMap);
 
-		// Create the regex to do path routing
-		var regex = new RegExp('^'+path+'$', 'i');
-		regex.path = path; // store so we can find the route on match
-		regex.tokenMap = pathTokenMap; // store so we can assign values to tokens on match
-		routeRegexes.push(regex);
+		var regex;
+		if (path instanceof RegExp) {
+			regex = path;
+		} else {
+			// Parse named tokens and create a token map
+			path = parsePathTokens(path, pathTokenMap);
+			regex = new RegExp('^'+path+'$', 'i');
+		}
 
 		// Create the route object
-		var route = new Route(path);
-		routes[path] = route;
+		var route = new Route(path, pathTokenMap);
+		routes[regex] = route;
+		routeRegexes.push(regex);
 
 		// Call the given definer
 		defineFn.call(route, route.link.bind(route), route.method.bind(route));
