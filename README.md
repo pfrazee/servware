@@ -1,7 +1,7 @@
 Servware
 ========
 
-**Server framework for Local.js.** Designed to be a simple, intuitive mapping between HTTPL messages and JS behaviors.
+**Server framework for [Local.js](https://github.com/grimwire/local).** Designed to be a simple, intuitive mapping between HTTPL messages and JS behaviors.
 
  - Generates responses from returned values, promises, and exceptions.
  - Helps construct "Link directories" (the Link response header)
