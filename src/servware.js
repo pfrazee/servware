@@ -1,3 +1,4 @@
+var protocols = require('./protocols');
 var Route = require('./route');
 var reqMixin = require('./request');
 var resMixin = require('./response');
@@ -17,64 +18,66 @@ function servware() {
 		// Match the path
 		for (var i=0; i < routeRegexes.length; i++) {
 			var match = routeRegexes[i].exec(req.path);
-			if (match) {
-				// Extract params
-				req.params = match.slice(1);
-				var route = routes[routeRegexes[i]];
-				var pathTokenMap = route.pathTokenMap;
+			if (!match) { continue; }
 
-				// Match the method
-				var methodHandlers = route.methods[req.method];
-				if (methodHandlers) {
-					// Add tokens to params
-					for (var k in pathTokenMap) {
-						req.params[pathTokenMap[k]] = req.params[k];
+			// Extract params
+			req.params = match.slice(1);
+			var route = routes[routeRegexes[i]];
+			var pathTokenMap = route.pathTokenMap;
+
+			// Match the method
+			var methodHandlers = route.methods[req.method];
+			if (!methodHandlers) { return res.writeHead(405, reasons[405]).end(); }
+
+			// Add pre/post methods
+			if (route.preMethods[req.method]) { methodHandlers = route.preMethods[req.method].concat(methodHandlers); }
+			if (route.postMethods[req.method]) { methodHandlers = methodHandlers.concat(route.postMethods[req.method]); }
+
+			// Add tokens to params
+			for (var k in pathTokenMap) {
+				req.params[pathTokenMap[k]] = req.params[k];
+			}
+
+			// Pull route links into response
+			if (route.links.length) {
+				res.setHeader('link', local.util.deepClone(route.links));
+			}
+
+			// Patch serializeHeaders() to replace path tokens
+			var orgSeralizeHeaders = res.serializeHeaders;
+			Object.defineProperty(res, 'serializeHeaders', { value: function() {
+				orgSeralizeHeaders.call(this);
+				if (!this.headers.link) return;
+				for (var k in pathTokenMap) {
+					var token = ':'+pathTokenMap[k];
+					this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
+				}
+			}, configurable: true });
+
+			// Define post-handler behavior
+			function handleReturn (resData) {
+				// Go to the next handler if given true (the middleware signal)
+				if (resData === true) {
+					handlerIndex++;
+					if (!methodHandlers[handlerIndex]) {
+						console.error('Route handler returned true but no further handlers were available');
+						return res.writeHead(500, reasons[500]).end();
 					}
-
-					// Pull route links into response
-					if (route.links.length) {
-						res.setHeader('link', local.util.deepClone(route.links));
-					}
-
-					// Patch serializeHeaders() to replace path tokens
-					var orgSeralizeHeaders = res.serializeHeaders;
-					Object.defineProperty(res, 'serializeHeaders', { value: function() {
-						orgSeralizeHeaders.call(this);
-						if (!this.headers.link) return;
-						for (var k in pathTokenMap) {
-							var token = ':'+pathTokenMap[k];
-							this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
-						}
-					}, configurable: true });
-
-					// Define post-handler behavior
-					function handleReturn (resData) {
-						// Go to the next handler if given true (the middleware signal)
-						if (resData === true) {
-							handlerIndex++;
-							if (!methodHandlers[handlerIndex]) {
-								console.error('Route handler returned true but no further handlers were available');
-								return res.writeHead(500, reasons[500]).end();
-							}
-							local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
-						} else {
-							// Fill the response, if needed
-							if (resData) { writeResponse(res, resData); }
-						}
-					}
-
-					// If not streaming, wait for body; otherwise, go immediately
-					var handlerIndex = 0;
-					var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
-					p.then(function() {
-						// Run the handler
-						return methodHandlers[handlerIndex].apply(route, args);
-					}).always(handleReturn);
-					return;
+					local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
 				} else {
-					return res.writeHead(405, reasons[405]).end();
+					// Fill the response, if needed
+					if (resData) { writeResponse(res, resData); }
 				}
 			}
+
+			// If not streaming, wait for body; otherwise, go immediately
+			var handlerIndex = 0;
+			var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
+			p.then(function() {
+				// Run the handler
+				return methodHandlers[handlerIndex].apply(route, args);
+			}).always(handleReturn);
+			return;
 		}
 		res.writeHead(404, reasons[404]).end();
 	};
@@ -96,10 +99,15 @@ function servware() {
 		routeRegexes.push(regex);
 
 		// Call the given definer
-		defineFn.call(route, route.link.bind(route), route.method.bind(route));
+		if (defineFn) {
+			defineFn.call(route, route.link.bind(route), route.method.bind(route), route.protocol.bind(route));
+		}
+
+		return route;
 	};
 	return serverFn;
 }
+servware.protocols = protocols;
 
 function writeResponse(res, data) {
 	// Standardize data

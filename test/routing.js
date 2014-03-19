@@ -145,3 +145,30 @@ success
   status: 200
 }
 */
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET', url: 'httpl://test/route/pre-and-post-methods' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+success
+{
+  body: "abc",
+  headers: {"content-type": "text/plain"},
+  reason: "OK",
+  status: 200
+}
+*/
+
+done = false;
+startTime = Date.now();
+var res = local.dispatch({ method: 'GET2', url: 'httpl://test/route/pre-and-post-methods' });
+res.then(printSuccess, printError).always(finishTest);
+wait(function () { return done; });
+
+/* =>
+error
+{body: "", headers: {}, reason: "Method Not Allowed", status: 405}
+*/

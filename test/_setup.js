@@ -16,11 +16,10 @@ testserver.route('/route/tokens/:foo', function(link, method) {
 		return [200, req.params.foo];
 	});
 });
-testserver.route('/route/tokens/:foo/:bar', function(link, method) {
-	method('GET', function(req, res) {
+testserver.route('/route/tokens/:foo/:bar')
+	.method('GET', function(req, res) {
 		return [200, req.params.foo + ' & ' + req.params.bar];
 	});
-});
 testserver.route('/route/tokens/:foo/(group)/:bar', function(link, method) {
 	method('GET', function(req, res) {
 		return [200, req.params.foo + ' & ' + req.params.bar];
@@ -48,6 +47,26 @@ testserver.route('/route/middleware', function(link, method) {
 		}
 	);
 });
+testserver.route('/route/pre-and-post-methods')
+	.beforeMethod('GET', function(req) {
+		req.foo = 'a';
+		return true;
+	})
+	.method('GET', function(req) {
+		req.foo += 'b';
+		return true;
+	})
+	.afterMethod('GET', function(req) {
+		req.foo += 'c';
+		return [200, req.foo];
+	})
+	.beforeMethod('GET2', function() {
+		return [200, 'this will'];
+	})
+	// no method() for GET2
+	.afterMethod('GET2', function() {
+		return [200, 'not work'];
+	});
 
 testserver.route('/opts/stream', function(link, method) {
 	method('YES', { stream: true }, function(req, res) {
@@ -194,3 +213,17 @@ testserver.route('/links/:foo/:bar', function(link, method) {
 	link({ href: '/:foo/:bar', rel: 'self item', foo: ':foo', id: ':bar' });
 	method('GET', function(req, res) { return 200; });
 });
+
+testserver.route('/rel/foo').protocol('stdrel.com/rel', {
+	rel: 'test/rel/foo',
+	html: '<h1>This is a reltype!</h1>',
+	onMixin: function(route, cfg) {
+		route.method('GET', function() { return [200, cfg.getMsg]; });
+	}
+});
+testserver.route('/protocol/foo').protocol('test/rel/foo', { getMsg: 'Hello, world' });
+
+servware.protocols.add('somewhere.com/rel/bar', function(route, cfg) {
+	route.method('GET', function() { return [200, cfg.getHtml, {'Content-Type': 'text/html'}]; });
+});
+testserver.route('/protocol/bar').protocol('somewhere.com/rel/bar', { getHtml: '<h1>Hello, world</h1>' });

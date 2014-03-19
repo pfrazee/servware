@@ -53,6 +53,56 @@ module.exports.reasons = {
     "511": "Network Authentication Required"
 };
 },{}],2:[function(require,module,exports){
+// Protocol registry
+var reltypes = {};
+function getProtocol(type) {
+	if (type in reltypes) return reltypes[type];
+	throw "Protocol not found for reltype: "+type;
+}
+function addProtocol(reltype, protocol) {
+	reltypes[reltype] = protocol;
+}
+
+// Reltype protocol, adds new protocols
+addProtocol('stdrel.com/rel', function(route, cfg) {
+	var invalid = true;
+	if (cfg.rel && cfg.onMixin) {
+		addProtocol(cfg.rel, cfg.onMixin);
+		invalid = false;
+	}
+	if (cfg.html) {
+		addHtmlMethod(route, cfg.html);
+		invalid = false;
+	}
+	if (invalid) {
+		throw "No applicable stdrel.com/rel config: `{ rel:, onMixin: }` to add a protocol, `{ html: }` to serve html";
+	}
+});
+
+// pulled out to minimize closure
+function addHtmlMethod(route, html) {
+	route.method('GET', function(req, res) {
+		// Check accept header
+		var accept = local.preferredType(req, ['text/*']);
+		if (!accept) {
+			// Not valid? note that fault and let any subsequent methods run
+			req.__stdrel_com_rel__badaccept = true;
+			return true;
+		}
+		// Serve the spec
+		return [200, html, {'Content-Type': 'text/html'}];
+	});
+	route.afterMethod('GET', function(req, res) {
+		// Did we get here because of a bad accept? throw that error
+		if (req.__stdrel_com_rel__badaccept) { throw 406; }
+	});
+}
+
+module.exports = {
+	get: getProtocol,
+	add: addProtocol
+};
+},{}],3:[function(require,module,exports){
 function mixin(request) {
 	Object.defineProperty(request, 'assert', { value: req_assert, enumerable: false });
 }
@@ -131,7 +181,7 @@ function asArray(v) {
 }
 
 module.exports = mixin;
-},{}],3:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 function mixin(response) {
 	Object.defineProperty(response, 'link', { value: res_link, enumerable: false });
 	Object.defineProperty(response, 'modlinks', { value: res_modlinks, enumerable: false });
@@ -171,12 +221,16 @@ function res_modlinks(query, update) {
 }
 
 module.exports = mixin;
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
+var protocols = require('./protocols');
+
 function Route(path, pathTokenMap) {
 	this.path = path;
 	this.pathTokenMap = pathTokenMap;
 	this.links = [];
+	this.preMethods = {};
 	this.methods = {};
+	this.postMethods = {};
 
 	// Set a default HEAD method
 	this.method('HEAD', function() { return 204; });
@@ -186,6 +240,7 @@ function Route(path, pathTokenMap) {
 // - linkObj: required object
 Route.prototype.link = function(linkObj) {
 	this.links.push(linkObj);
+	return this;
 };
 
 // Add a method to the route
@@ -193,28 +248,61 @@ Route.prototype.link = function(linkObj) {
 // - opts: optional object, config options for the method behavior
 //   - opts.stream: bool, does not wait for the request to end before handling if true
 // - cb*: required functions, the handler functions
-Route.prototype.method = function() {
-	var method = arguments[0];
+Route.prototype.method = function(/*method, opts=null, ...handlers*/) {
+	addMethod.call(this, 'methods', Array.prototype.slice.call(arguments));
+	return this;
+};
+// Same as `method`, but adds to the preMethod queue
+Route.prototype.beforeMethod = function(/*method, opts=null, ...handlers*/) {
+	addMethod.call(this, 'preMethods', Array.prototype.slice.call(arguments));
+	return this;
+};
+// Same as `method`, but adds to the postMethod queue
+Route.prototype.afterMethod = function(/*method, opts=null, ...handlers*/) {
+	addMethod.call(this, 'postMethods', Array.prototype.slice.call(arguments));
+	return this;
+};
+// Helper to add methods
+function addMethod(listName, args) {
+	var method = args[0];
 	if (Array.isArray(method)) {
-		var args = Array.prototype.slice.call(arguments, 1);
+		args = args.slice(1);
 		method.forEach(function(method) { this.method.apply(this, [method].concat(args)); }.bind(this));
-		return;
+		return this;
 	}
 
 	// Extract arguments
-	var opts = (typeof arguments[1] == 'object') ? arguments[1] : null;
-	var hindex = opts ? 2 : 1;
-	var handlers = Array.prototype.slice.call(arguments, hindex);
+	var opts = (typeof args[1] == 'object') ? args[1] : null;
+	var handlers = Array.prototype.slice.call(args, opts ? 2 : 1);
 
 	// Mix in options
 	for (var k in opts) {
 		handlers[k] = opts[k];
 	}
-	this.methods[method] = handlers;
+
+	// Add to list
+	if (this[listName][method]) {
+		this[listName][method].push(handlers);
+	} else {
+		this[listName][method] = handlers;
+	}
+	return this;
+}
+
+// Add a protocol to the route
+// - method: required string|Array(string), the verb(s)
+// - opts: optional object, config options for the method behavior
+//   - opts.stream: bool, does not wait for the request to end before handling if true
+// - cb*: required functions, the handler functions
+Route.prototype.protocol = function(reltype, cfg) {
+	if (!cfg) { cfg = {}; }
+	protocols.get(reltype)(this, cfg);
+	return this;
 };
 
 module.exports = Route;
-},{}],5:[function(require,module,exports){
+},{"./protocols":2}],6:[function(require,module,exports){
+var protocols = require('./protocols');
 var Route = require('./route');
 var reqMixin = require('./request');
 var resMixin = require('./response');
@@ -234,64 +322,66 @@ function servware() {
 		// Match the path
 		for (var i=0; i < routeRegexes.length; i++) {
 			var match = routeRegexes[i].exec(req.path);
-			if (match) {
-				// Extract params
-				req.params = match.slice(1);
-				var route = routes[routeRegexes[i]];
-				var pathTokenMap = route.pathTokenMap;
+			if (!match) { continue; }
 
-				// Match the method
-				var methodHandlers = route.methods[req.method];
-				if (methodHandlers) {
-					// Add tokens to params
-					for (var k in pathTokenMap) {
-						req.params[pathTokenMap[k]] = req.params[k];
+			// Extract params
+			req.params = match.slice(1);
+			var route = routes[routeRegexes[i]];
+			var pathTokenMap = route.pathTokenMap;
+
+			// Match the method
+			var methodHandlers = route.methods[req.method];
+			if (!methodHandlers) { return res.writeHead(405, reasons[405]).end(); }
+
+			// Add pre/post methods
+			if (route.preMethods[req.method]) { methodHandlers = route.preMethods[req.method].concat(methodHandlers); }
+			if (route.postMethods[req.method]) { methodHandlers = methodHandlers.concat(route.postMethods[req.method]); }
+
+			// Add tokens to params
+			for (var k in pathTokenMap) {
+				req.params[pathTokenMap[k]] = req.params[k];
+			}
+
+			// Pull route links into response
+			if (route.links.length) {
+				res.setHeader('link', local.util.deepClone(route.links));
+			}
+
+			// Patch serializeHeaders() to replace path tokens
+			var orgSeralizeHeaders = res.serializeHeaders;
+			Object.defineProperty(res, 'serializeHeaders', { value: function() {
+				orgSeralizeHeaders.call(this);
+				if (!this.headers.link) return;
+				for (var k in pathTokenMap) {
+					var token = ':'+pathTokenMap[k];
+					this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
+				}
+			}, configurable: true });
+
+			// Define post-handler behavior
+			function handleReturn (resData) {
+				// Go to the next handler if given true (the middleware signal)
+				if (resData === true) {
+					handlerIndex++;
+					if (!methodHandlers[handlerIndex]) {
+						console.error('Route handler returned true but no further handlers were available');
+						return res.writeHead(500, reasons[500]).end();
 					}
-
-					// Pull route links into response
-					if (route.links.length) {
-						res.setHeader('link', local.util.deepClone(route.links));
-					}
-
-					// Patch serializeHeaders() to replace path tokens
-					var orgSeralizeHeaders = res.serializeHeaders;
-					Object.defineProperty(res, 'serializeHeaders', { value: function() {
-						orgSeralizeHeaders.call(this);
-						if (!this.headers.link) return;
-						for (var k in pathTokenMap) {
-							var token = ':'+pathTokenMap[k];
-							this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
-						}
-					}, configurable: true });
-
-					// Define post-handler behavior
-					function handleReturn (resData) {
-						// Go to the next handler if given true (the middleware signal)
-						if (resData === true) {
-							handlerIndex++;
-							if (!methodHandlers[handlerIndex]) {
-								console.error('Route handler returned true but no further handlers were available');
-								return res.writeHead(500, reasons[500]).end();
-							}
-							local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
-						} else {
-							// Fill the response, if needed
-							if (resData) { writeResponse(res, resData); }
-						}
-					}
-
-					// If not streaming, wait for body; otherwise, go immediately
-					var handlerIndex = 0;
-					var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
-					p.then(function() {
-						// Run the handler
-						return methodHandlers[handlerIndex].apply(route, args);
-					}).always(handleReturn);
-					return;
+					local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
 				} else {
-					return res.writeHead(405, reasons[405]).end();
+					// Fill the response, if needed
+					if (resData) { writeResponse(res, resData); }
 				}
 			}
+
+			// If not streaming, wait for body; otherwise, go immediately
+			var handlerIndex = 0;
+			var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
+			p.then(function() {
+				// Run the handler
+				return methodHandlers[handlerIndex].apply(route, args);
+			}).always(handleReturn);
+			return;
 		}
 		res.writeHead(404, reasons[404]).end();
 	};
@@ -313,10 +403,16 @@ function servware() {
 		routeRegexes.push(regex);
 
 		// Call the given definer
-		defineFn.call(route, route.link.bind(route), route.method.bind(route));
+		if (defineFn) {
+			defineFn.call(route, route.link.bind(route), route.method.bind(route), route.protocol.bind(route));
+		}
+
+		return route;
 	};
 	return serverFn;
 }
+servware.protocols = protocols;
+servware.protos = protocols;
 
 function writeResponse(res, data) {
 	// Standardize data
@@ -374,5 +470,5 @@ function parsePathTokens(path, tokenMap) {
 }
 
 (typeof window == 'undefined' ? self : window).servware = servware;
-},{"./http-constants":1,"./request":2,"./response":3,"./route":4}]},{},[5])
+},{"./http-constants":1,"./protocols":2,"./request":3,"./response":4,"./route":5}]},{},[6])
 ;
