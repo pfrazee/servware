@@ -5,22 +5,18 @@ Servware
 
  - Generates responses from returned values, promises, and exceptions.
  - Helps construct "Link directories" (the Link response header)
- - Supports middleware functions
- - Convenient defaults & helpers
+ - Route construction helpers (protocols, mixins, method stacks)
+ - Route middleware
 
+## Examples
 
-## API
-
-
-### `servware()` => serverFn
-
-Creates a server function which can have behaviors added with the `route()` function.
+A server with `GET html` and `POST json` at `/`:
 
 ```javascript
 var server = servware();
 local.addServer('myserver', server);
 
-server.route('/', function(link, method) {
+server.route('/', function(link, method, protocol) {
   method('GET', function(req, res) {
     req.assert({ accept: 'text/html' });
     return [200, 'Hello, World', {'Content-Type': 'text/html'}];
@@ -32,13 +28,181 @@ server.route('/', function(link, method) {
     return 204;
   });
 });
+
+// Alternatively:
+
+server.route('/')
+  .method('GET', function(req, res) {
+    req.assert({ accept: 'text/html' });
+    return [200, 'Hello, World', {'Content-Type': 'text/html'}];
+  })
+  .method('POST', function(req, res) {
+    req.assert({ type: 'application/json' });
+    doSomething(req.body);
+    return 204;
+  });
+```
+
+A media page with links:
+
+```javascript
+server.route('/about')
+  .link({ href: '/', rel: 'up via service', title: 'My Server' })
+  .link({ href: '/about', rel: 'self stdrel.com/media', type: 'text/html', title: 'About My Server' })
+  .method('GET', function(req, res) {
+    req.assert({ accept: 'text/html' });
+    return [200, 'It is a server', {'Content-Type': 'text/html'}];
+  });
+```
+
+A stream transformer via protocols:
+
+ - <a href="http://stdrel.com/transformer">stdrel.com/transformer</a>
+
+```javascript
+server.route('/stream/toupper')
+  .link({ href: '/', rel: 'up via service', title: 'My Server' })
+  .link({ href: '/util/toupper', rel: 'self', id: 'toupper', title: 'ToUppercase Transformer' })
+  .protocol('stdrel.com/transformer', {
+    transform: function(chunk) { return chunk.toUpperCase(); }
+  });
+```
+
+A CRUD collection and item via protocols:
+
+ - <a href="http://stdrel.com/crud-coll">stdrel.com/crud-coll</a>
+ - <a href="http://stdrel.com/crud-item">stdrel.com/crud-item</a>
+
+```javascript
+var users = [];
+server.route('/users')
+  .link({ href: '/', rel: 'up via service', title: 'My Server' })
+  .link({ href: '/users', rel: 'self', title: 'My Server Users', id: 'users' })
+  .link({ href: '/users/{id}', rel: 'item' })
+  .protocol('stdrel.com/crud-coll', {
+    validate: function(item, req, res) {
+      var errors = {};
+      if (!item.fname) errors.fname = 'Required.';
+      if (!item.lname) errors.lname = 'Required.';
+      return errors;
+    },
+    add: function(item, req, res) {
+      var addedItem = {
+        id: users.length,
+        fname: item.fname,
+        lname: item.lname,
+      };
+      users.push(addedItem);
+      return addedItem;
+    }
+  });
+server.route('/users/:id')
+  .link({ href: '/', rel: 'up via service', title: 'My Server' })
+  .link({ href: '/users', rel: 'up', title: 'My Server Users', id: 'users' })
+  .link({ href: '/users/:id', rel: 'self' })
+  .protocol('stdrel.com/crud-item', {
+    validate: function(item, req, res) {
+      var errors = {};
+      if (!item.fname) errors.fname = 'Required.';
+      if (!item.lname) errors.lname = 'Required.';
+      return errors;
+    },
+    get: function(id, req, res) {
+      return myitems[id];
+    },
+    put: function(id, values, req, res) {
+      myitems[id] = {
+        id: id,
+        fname: values.fname,
+        lname: values.lname
+      };
+    },
+    delete: function(id, req, res) {
+      delete myitems[id];
+    }
+  });
+```
+
+Defining a protocol, using link mixins, and using the after-method stack:
+
+```javascript
+servware.protocols.add('stdrel.com/media', function(route, cfg) {
+  // Add reltype
+  route.mixinLink('self', { rel: 'stdrel.com/media', type: cfg.type });
+
+  // Add behaviors
+  route.method('GET', function(req, res) {
+    // Type negotiation
+    var accept = local.preferredType(req, [cfg.type]);
+    if (!accept) {
+      // Not valid? note that fault and let any subsequent methods run
+      req.__stdrel_com_media__badaccept = true;
+      return true;
+    }
+
+    // Serve media
+    var content = cfg.content;
+    if (typeof content == 'function') {
+      content = content(req, res);
+    }
+    return local.promise(content).then(function(content) {
+      return [200, content, {'Content-Type': cfg.type}];
+    });
+  });
+  route.afterMethod('GET', function(req, res) {
+    // Did we get here because of a bad accept? throw that error
+    if (req.__stdrel_com_media__badaccept) { throw 406; }
+  });
+});
+```
+
+
+## Toplevel API
+
+
+### `servware()` => serverFn
+
+Creates a server function which can have behaviors added with the `route()` function.
+
+```javascript
+var server = servware();
+local.addServer('myserver', server);
+
+server.route('/', function(link, method, protocol) {
+  method('GET', function(req, res) {
+    req.assert({ accept: 'text/html' });
+    return [200, 'Hello, World', {'Content-Type': 'text/html'}];
+  });
+
+  method('POST', function(req, res) {
+    req.assert({ type: 'application/json' });
+    doSomething(req.body);
+    return 204;
+  });
+});
+
+// Alternatively:
+
+server.route('/')
+  .method('GET', function(req, res) {
+    req.assert({ accept: 'text/html' });
+    return [200, 'Hello, World', {'Content-Type': 'text/html'}];
+  })
+  .method('POST', function(req, res) {
+    req.assert({ type: 'application/json' });
+    doSomething(req.body);
+    return 204;
+  });
 ```
 
 <br>
 -
 
 
-### `serverFn.route(path, defineFn)`
+## Route API
+
+
+### `serverFn.route(path, defineFn)` => route
 
 Adds a new `path` selector to the server function and calls `defineFn` to set its behaviors.
 
@@ -70,7 +234,7 @@ server.route('/foo/:subitem', fooSubRoute);
 **Defining the Route**
 
 ```javascript
-server.route('/', function(link, method) {
+server.route('/', function(link, method, protocol) {
   link({ href: '/', rel: 'self service', title: 'Hello World Server' });
 
   method('GET', function(req, res) {
@@ -82,13 +246,24 @@ server.route('/', function(link, method) {
 
 When `route()` is called, it sets up the `path` selector, then calls immediately calls `defineFn()`.
 
+Alternatively, the returned route instance can be used to chain definition functions:
+
+```javascript
+server.route('/')
+  .link({ href: '/', rel: 'self service', title: 'Hello World Server' })
+  .method('GET', function(req, res) {
+    req.assert({ accept: 'text/html' });
+    return [200, 'Hello, World', {'Content-Type': 'text/html'}];
+  });
+```
+
 By default, `route()` defines the HEAD method as `function() { return 204; }`. You can override that definition.
 
 <br>
 -
 
 
-### `link(linkObj)`
+### `route.link(linkObj)`
 
  - `linkObj`: required Object, a link description
 
@@ -116,12 +291,37 @@ Any tokens in the `route()` path will be substituted in the Link header response
 -
 
 
-### `method(methodName, [opts], ...handlerFns)`
+### `route.mixinLink(rel, linkObj)`
+
+ - `rel`: required string, the reltypes to apply this to
+ - `linkObj`: required object, the link attributes
+
+Adds a mixin which will decorate links which are added via `route.link()`
+
+```javascript
+server.route('/links')
+  .mixinLink('up', { rel: 'via' })
+  .link({ href: '/', rel: 'up', foo: 'bar' })
+  .mixinLink('via', { rel: 'service', foo: 'baz', hello: 'world' })
+
+// produces:
+Link: [{ href: '/', rel: 'up via service', foo: 'bar', hello: 'world' }]
+```
+
+Mixins are applied before the method handlers are called. If no link is created of the given reltype, the mixin will not be applied. If a non-`rel` attribute collides, the first value set is used.
+
+<br>
+-
+
+
+### `route.method(methodName, [opts], ...handlerFns)`
 
  - `methodName`: required String
  - `opts`: optional Object
   - `opts.stream`: optional bool, handle the request on arrival (instead of waiting for the request 'end' event)? Default false.
  - `handlerFns`: required Function(req, res), the middleware/handlers.
+
+Places the handlers in the default method queue. Execution through the queue is continued when a true value is returned, and stopped when a response value is returned.
 
 <br>
 **Return Values**
@@ -173,6 +373,30 @@ server.route('/', function(link, method) {
 <br>
 -
 
+### `route.beforeMethod(methodName, ...handlerFns)`
+
+ - `methodName`: required String
+ - `handlerFns`: required Function(req, res), the middleware/handlers.
+
+Like `route.method()`, but places the handlers in the "pre-queue" which is executed before the default method queue. Execution through the queues is continued when a true value is returned, and stopped when a response value is returned.
+
+<br>
+-
+
+### `route.afterMethod(methodName, ...handlerFns)`
+
+ - `methodName`: required String
+ - `handlerFns`: required Function(req, res), the middleware/handlers.
+
+Like `route.method()`, but places the handlers in the "post-queue" which is executed after the default method queue. Execution through the queues is continued when a true value is returned, and stopped when a response value is returned.
+
+<br>
+-
+
+
+## Request API
+
+The following functions are mixed into the Local.js requests:
 
 ### `req.assert(assertions)`
 
@@ -184,6 +408,11 @@ Checks the request against the given assertions. Throws a failure response on fa
 
 <br>
 -
+
+
+## Response API
+
+The following functions are mixed into the Local.js responses:
 
 
 ### `res.link(linkObj)`
