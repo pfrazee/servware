@@ -214,19 +214,98 @@ testserver.route('/links/:foo/:bar', function(link, method) {
 	method('GET', function(req, res) { return 200; });
 });
 
-testserver.route('/rel/foo').protocol('stdrel.com/rel', {
-	rel: 'test/rel/foo',
-	html: '<h1>This is a reltype!</h1>',
-	onMixin: function(route, cfg) {
-		route.method('GET', function() { return [200, cfg.getMsg]; });
-	}
-});
-testserver.route('/protocol/foo').protocol('test/rel/foo', { getMsg: 'Hello, world' });
-
 servware.protocols.add('somewhere.com/rel/bar', function(route, cfg) {
 	route.mixinLink('self', { rel: 'somewhere.com/rel/bar' });
 	route.method('GET', function() { return [200, cfg.getHtml, {'Content-Type': 'text/html'}]; });
 });
 testserver.route('/protocol/bar')
-	.link({ href: '/', rel: 'self', title: 'My Bar Protocol' })
+	.link({ href: '/protocol/bar', rel: 'self', title: 'My Bar Protocol' })
 	.protocol('somewhere.com/rel/bar', { getHtml: '<h1>Hello, world</h1>' });
+
+testserver.route('/rel/foo')
+	.protocol('stdrel.com/rel', {
+		rel: 'test/rel/foo',
+		html: '<h1>This is a reltype!</h1>',
+		onMixin: function(route, cfg) {
+			route.method('GET', function() { return [200, cfg.getMsg]; });
+		}
+	});
+testserver.route('/protocol/foo')
+	.protocol('test/rel/foo', { getMsg: 'Hello, world' });
+
+testserver.route('/protocol/media1')
+	.link({ href: '/protocol/media1', rel: 'self', title: 'Media1' })
+	.protocol('stdrel.com/media', {
+		type: 'application/json',
+		content: {foo:'bar'}
+	});
+testserver.route('/protocol/media2')
+	.link({ href: '/protocol/media2', rel: 'self', title: 'Media2' })
+	.protocol('stdrel.com/media', {
+		type: 'application/json',
+		content: function() { return {foo:'bar'}; }
+	});
+testserver.route('/protocol/media3')
+	.link({ href: '/protocol/media3', rel: 'self', title: 'Media3' })
+	.protocol('stdrel.com/media', {
+		type: 'application/json',
+		content: function() {
+			var p = local.promise();
+			setTimeout(function() { p.fulfill({foo:'bar'}); }, 50);
+			return p;
+		}
+	});
+
+testserver.route('/protocol/transformer')
+	.link({ href: '/protocol/transformer', rel: 'self', title: 'ToUppercase Transformer' })
+	.protocol('stdrel.com/transformer', {
+		transform: function(chunk) { return chunk.toUpperCase(); }
+	});
+
+var myitems = [];
+testserver.route('/protocol/crud-coll')
+	.link({ href: '/protocol/crud-coll', rel: 'self', title: 'My Collection' })
+	.protocol('stdrel.com/crud-coll', {
+		itemUrl: '/protocol/crud-coll/{id}',
+		validate: function(item, req, res) {
+			var errors = {};
+			if (!item.fname) errors.fname = 'Required.';
+			if (!item.lname) errors.lname = 'Required.';
+			return errors;
+		},
+		add: function(item, req, res) {
+			var addedItem = {
+				id: myitems.length,
+				fname: item.fname,
+				lname: item.lname,
+			};
+			myitems.push(addedItem);
+			return addedItem;
+		}
+	});
+testserver.route('/protocol/crud-coll/:id')
+	.link({ href: '/protocol/crud-coll/:id', rel: 'self' })
+	.protocol('stdrel.com/crud-item', {
+		collUrl: '/protocol/crud-coll',
+		validate: function(item, req, res) {
+			var errors = {};
+			if (!item.fname) errors.fname = 'Required.';
+			if (!item.lname) errors.lname = 'Required.';
+			return errors;
+		},
+		get: function(id, req, res) {
+			return myitems[id];
+		},
+		put: function(id, values, req, res) {
+			myitems[id] = {
+				id: id,
+				fname: values.fname,
+				lname: values.lname
+			};
+			return true;
+		},
+		delete: function(id, req, res) {
+			delete myitems[id];
+			return true;
+		}
+	});

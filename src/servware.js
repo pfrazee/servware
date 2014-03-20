@@ -4,6 +4,9 @@ var reqMixin = require('./request');
 var resMixin = require('./response');
 var reasons = require('./http-constants').reasons;
 
+// Define stdrel.com protocols
+require('./stdrel-com');
+
 function servware() {
 	var routes = {};
 	var routeRegexes = [];
@@ -59,7 +62,7 @@ function servware() {
 						if (link[k]) {
 							// Combine if it's the rel
 							if (k == 'rel') {
-								link.rel += ' '+props[k];
+								link.rel += ' '+props.rel;
 							}
 							// otherwise, ignore
 						} else {
@@ -92,7 +95,7 @@ function servware() {
 					console.error('Route handler returned true but no further handlers were available');
 					return res.writeHead(500, reasons[500]).end();
 				}
-				local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
+				local.promise.lift(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
 			} else {
 				// Fill the response, if needed
 				if (resData) { writeResponse(res, resData); }
@@ -101,11 +104,17 @@ function servware() {
 
 		// If not streaming, wait for body; otherwise, go immediately
 		var handlerIndex = 0;
-		var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
-		p.then(function() {
-			// Run the handler
-			return methodHandlers[handlerIndex].apply(route, args);
-		}).always(handleReturn);
+		if (methodHandlers.stream) {
+			local.promise.lift(function() {
+				// Run the handler
+				return methodHandlers[handlerIndex].apply(route, args);
+			}).always(handleReturn);
+		} else {
+			req.body_.then(function() {
+				// Run the handler
+				return methodHandlers[handlerIndex].apply(route, args);
+			}).always(handleReturn);
+		}
 	};
 	serverFn.route = function(path, defineFn) {
 		var pathTokenMap = {}; // regex match index -> token name (eg {0: 'section', 1: 'id'})

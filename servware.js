@@ -63,41 +63,6 @@ function addProtocol(reltype, protocol) {
 	reltypes[reltype] = protocol;
 }
 
-// Reltype protocol, adds new protocols
-addProtocol('stdrel.com/rel', function(route, cfg) {
-	var invalid = true;
-	if (cfg.rel && cfg.onMixin) {
-		addProtocol(cfg.rel, cfg.onMixin);
-		invalid = false;
-	}
-	if (cfg.html) {
-		addHtmlMethod(route, cfg.html);
-		invalid = false;
-	}
-	if (invalid) {
-		throw "No applicable stdrel.com/rel config: `{ rel:, onMixin: }` to add a protocol, `{ html: }` to serve html";
-	}
-});
-
-// pulled out to minimize closure
-function addHtmlMethod(route, html) {
-	route.method('GET', function(req, res) {
-		// Check accept header
-		var accept = local.preferredType(req, ['text/*']);
-		if (!accept) {
-			// Not valid? note that fault and let any subsequent methods run
-			req.__stdrel_com_rel__badaccept = true;
-			return true;
-		}
-		// Serve the spec
-		return [200, html, {'Content-Type': 'text/html'}];
-	});
-	route.afterMethod('GET', function(req, res) {
-		// Did we get here because of a bad accept? throw that error
-		if (req.__stdrel_com_rel__badaccept) { throw 406; }
-	});
-}
-
 module.exports = {
 	get: getProtocol,
 	add: addProtocol
@@ -317,6 +282,9 @@ var reqMixin = require('./request');
 var resMixin = require('./response');
 var reasons = require('./http-constants').reasons;
 
+// Define stdrel.com protocols
+require('./stdrel-com');
+
 function servware() {
 	var routes = {};
 	var routeRegexes = [];
@@ -372,7 +340,7 @@ function servware() {
 						if (link[k]) {
 							// Combine if it's the rel
 							if (k == 'rel') {
-								link.rel += ' '+props[k];
+								link.rel += ' '+props.rel;
 							}
 							// otherwise, ignore
 						} else {
@@ -405,7 +373,7 @@ function servware() {
 					console.error('Route handler returned true but no further handlers were available');
 					return res.writeHead(500, reasons[500]).end();
 				}
-				local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
+				local.promise.lift(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
 			} else {
 				// Fill the response, if needed
 				if (resData) { writeResponse(res, resData); }
@@ -414,11 +382,17 @@ function servware() {
 
 		// If not streaming, wait for body; otherwise, go immediately
 		var handlerIndex = 0;
-		var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
-		p.then(function() {
-			// Run the handler
-			return methodHandlers[handlerIndex].apply(route, args);
-		}).always(handleReturn);
+		if (methodHandlers.stream) {
+			local.promise.lift(function() {
+				// Run the handler
+				return methodHandlers[handlerIndex].apply(route, args);
+			}).always(handleReturn);
+		} else {
+			req.body_.then(function() {
+				// Run the handler
+				return methodHandlers[handlerIndex].apply(route, args);
+			}).always(handleReturn);
+		}
 	};
 	serverFn.route = function(path, defineFn) {
 		var pathTokenMap = {}; // regex match index -> token name (eg {0: 'section', 1: 'id'})
@@ -504,5 +478,248 @@ function parsePathTokens(path, tokenMap) {
 }
 
 (typeof window == 'undefined' ? self : window).servware = servware;
-},{"./http-constants":1,"./protocols":2,"./request":3,"./response":4,"./route":5}]},{},[6])
+},{"./http-constants":1,"./protocols":2,"./request":3,"./response":4,"./route":5,"./stdrel-com":9}],7:[function(require,module,exports){
+var protocols = require('../protocols');
+
+// CRUD Collection protocol, hosts a manipulable collection of data
+/*
+route(...)
+	.link({ href: '/my-coll', rel: 'self', title: 'My Collection' })
+	.protocol('stdrel.com/crud-coll', {
+		itemUrl: '/my-coll/{id}',
+		validate: function(item, req, res) {
+			var errors = {};
+			if (!item.fname) errors.fname = 'Required.';
+			if (!item.lname) errors.lname = 'Required.';
+			return errors;
+		},
+		add: function(item, req, res) {
+			var addedItem = {
+				id: myitems.length,
+				fname: item.fname,
+				lname: item.lname,
+			};
+			myitems.push(addedItem);
+			return addedItem;
+		}
+	});
+*/
+protocols.add('stdrel.com/crud-coll', function(route, cfg) {
+	var itemUrl = cfg.itemUrl || cfg.itemUri;
+	var itemUrlTmpl = local.UriTemplate.parse(itemUrl);
+
+	// Set links
+	route.mixinLink('self', { rel: 'stdrel.com/crud-coll' });
+	route.link({ href: itemUrl, rel: 'item stdrel.com/crud-item' });
+
+	// Add behaviors
+	route.method('POST', function(req, res) {
+		// Validate
+		req.assert({ type: 'application/json' });
+		if (!req.body || typeof req.body != 'object') {
+			throw [422, { error: 'Body is required.' }];
+		}
+		if (cfg.validate) {
+			var errors = cfg.validate(req.body, req, res);
+			if (Object.keys(errors).length > 0) {
+				throw [422, { errors: errors }];
+			}
+		}
+
+		// Add to collection
+		return local.promise(cfg.add(req.body, req, res)).then(function (addedItem) {
+			var uri = itemUrlTmpl.expand(addedItem);
+			res.header('Location', uri);
+			return 201;
+		});
+	});
+});
+},{"../protocols":2}],8:[function(require,module,exports){
+var protocols = require('../protocols');
+
+// CRUD Item protocol, hosts a manipulable item within a collection
+/*
+route(...)
+	.link({ href: '/my-coll/{id}', rel: 'self' })
+	.protocol('stdrel.com/crud-item', {
+		collUrl: '/my-coll',
+		validate: function(item, req, res) {
+			var errors = {};
+			if (!item.fname) errors.fname = 'Required.';
+			if (!item.lname) errors.lname = 'Required.';
+			return errors;
+		},
+		get: function(id, req, res) {
+			return myitems[id];
+		},
+		put: function(id, values, req, res) {
+			myitems[id] = {
+				id: id,
+				fname: values.fname,
+				lname: values.lname
+			};
+		},
+		delete: function(id, req, res) {
+			delete myitems[id];
+		}
+	});
+*/
+protocols.add('stdrel.com/crud-item', function(route, cfg) {
+	var collUrl = cfg.collUrl || cfg.collUri;
+
+	// Set links
+	route.mixinLink('self', { rel: 'stdrel.com/crud-item' });
+	route.link({ href: collUrl, rel: 'up stdrel.com/crud-item' });
+
+	// Add behaviors
+	route.method('GET', function(req, res) {
+		// Update links
+		res.modlinks({ rel: 'self' }, { id: req.params.id });
+
+		// Validate
+		req.assert({ accept: 'application/json' });
+
+		// Add to collection
+		return local.promise(cfg.get(req.params.id, req, res)).then(function (fetchedItem) {
+			return [200, fetchedItem];
+		});
+	});
+	route.method('PUT', function(req, res) {
+		// Update links
+		res.modlinks({ rel: 'self' }, { id: req.params.id });
+
+		// Validate
+		req.assert({ type: 'application/json' });
+		if (!req.body || typeof req.body != 'object') {
+			throw [422, { error: 'Body is required.' }];
+		}
+		if (cfg.validate) {
+			var errors = cfg.validate(req.body, req, res);
+			if (Object.keys(errors).length > 0) {
+				throw [422, { errors: errors }];
+			}
+		}
+
+		// Update collection
+		return local.promise(cfg.put(req.params.id, req.body, req, res)).then(function () {
+			return 204;
+		});
+	});
+	route.method('DELETE', function(req, res) {
+		// Update links
+		res.modlinks({ rel: 'self' }, { id: req.params.id });
+
+		// Update collection
+		return local.promise(cfg.delete(req.params.id, req, res)).then(function () {
+			return 204;
+		});
+	});
+});
+},{"../protocols":2}],9:[function(require,module,exports){
+require('./rel');
+require('./media');
+require('./transformer');
+require('./crud-coll');
+require('./crud-item');
+},{"./crud-coll":7,"./crud-item":8,"./media":10,"./rel":11,"./transformer":12}],10:[function(require,module,exports){
+var protocols = require('../protocols');
+
+// Media protocol, serves content
+/*
+route(...).protocol('stdrel.com/media', {
+	type: 'text/html',
+	content: '<h1>Hello, world</h1>',
+});
+route(...).protocol('stdrel.com/media', {
+	type: 'text/html',
+	content: function(req, res) { return '<h1>The time is: '+(new Date())+'</h1>'; }
+});
+route(...).protocol('stdrel.com/media', {
+	type: 'text/html',
+	content: function(req, res) { return local.promise(getContentAsync()); }
+});
+*/
+protocols.add('stdrel.com/media', function(route, cfg) {
+	// Add reltype
+	route.mixinLink('self', { rel: 'stdrel.com/media', type: cfg.type });
+
+	// Add behaviors
+	route.method('GET', function(req, res) {
+		// Type negotiation
+		var type = local.preferredType(req, [cfg.type]);
+		if (!type) throw 406;
+
+		// Serve media
+		var content = cfg.content;
+		if (typeof content == 'function') {
+			content = content(req, res);
+		}
+		return local.promise(content).then(function(content) {
+			return [200, content, {'Content-Type': cfg.type}];
+		});
+	});
+});
+},{"../protocols":2}],11:[function(require,module,exports){
+var protocols = require('../protocols');
+
+// Reltype protocol, adds new protocols
+/*
+route('/rel/foo')
+	.protocol('stdrel.com/rel', {
+		rel: 'bar.com/rel/foo',
+		onMixin: function(route, cfg) { ... },
+		html: '<h1>My Reltype Spec</h1>'
+	});
+*/
+protocols.add('stdrel.com/rel', function(route, cfg) {
+	route.mixinLink('self', { rel: 'stdrel.com/rel' });
+	if (cfg.rel && cfg.onMixin) {
+		protocols.add(cfg.rel, cfg.onMixin);
+	}
+	if (cfg.html) {
+		addHtmlMethod(route, cfg.html);
+	}
+});
+
+// pulled out to minimize closure
+function addHtmlMethod(route, html) {
+	route.method('GET', function(req, res) {
+		// Check accept header
+		var accept = local.preferredType(req, ['text/*']);
+		if (!accept) {
+			// Not valid? note that fault and let any subsequent methods run
+			req.__stdrel_com_rel__badaccept = true;
+			return true;
+		}
+		// Serve the spec
+		return [200, html, {'Content-Type': 'text/html'}];
+	});
+	route.afterMethod('GET', function(req, res) {
+		// Did we get here because of a bad accept? throw that error
+		if (req.__stdrel_com_rel__badaccept) { throw 406; }
+	});
+}
+},{"../protocols":2}],12:[function(require,module,exports){
+var protocols = require('../protocols');
+
+// Stream-transformer protocol, creates stream pipelines
+/*
+route(...).protocol('stdrel.com/transformer', {
+	transform: function(chunk) { return chunk.toUpperCase(); }
+});
+*/
+protocols.add('stdrel.com/transformer', function(route, cfg) {
+	// Add reltype
+	route.mixinLink('self', { rel: 'stdrel.com/transformer' });
+	if (cfg.transform) {
+		// Add protocol
+		route.method('POST', {stream: true}, function(req, res) {
+			req.assert({ type: 'text/plain', accept: 'text/plain' });
+			res.writeHead(200, 'OK', {'Content-Type': 'text/plain'});
+			req.on('data', function(chunk) { res.write(cfg.transform(chunk)); });
+			req.on('end',  function()      { res.end(); });
+		});
+	}
+});
+},{"../protocols":2}]},{},[6])
 ;
