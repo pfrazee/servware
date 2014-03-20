@@ -302,10 +302,8 @@ testserver.route('/protocol/crud-coll/:id')
 				fname: values.fname,
 				lname: values.lname
 			};
-			return true;
 		},
 		delete: function(id, req, res) {
 			delete myitems[id];
-			return true;
 		}
 	});

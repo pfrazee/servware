@@ -62,7 +62,7 @@ protocols.add('stdrel.com/crud-item', function(route, cfg) {
 		}
 
 		// Update collection
-		return local.promise(cfg.put(req.params.id, req.body, req, res)).then(function () {
+		return local.promise(cfg.put(req.params.id, req.body, req, res) || true).then(function () {
 			return 204;
 		});
 	});
@@ -71,7 +71,7 @@ protocols.add('stdrel.com/crud-item', function(route, cfg) {
 		res.modlinks({ rel: 'self' }, { id: req.params.id });
 
 		// Update collection
-		return local.promise(cfg.delete(req.params.id, req, res)).then(function () {
+		return local.promise(cfg.delete(req.params.id, req, res) || true).then(function () {
 			return 204;
 		});
 	});
