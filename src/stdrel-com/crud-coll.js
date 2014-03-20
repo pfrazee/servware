@@ -4,8 +4,8 @@ var protocols = require('../protocols');
 /*
 route(...)
 	.link({ href: '/my-coll', rel: 'self', title: 'My Collection' })
+	.link({ href: '/my-coll/{id}', rel: 'item' })
 	.protocol('stdrel.com/crud-coll', {
-		itemUrl: '/my-coll/{id}',
 		validate: function(item, req, res) {
 			var errors = {};
 			if (!item.fname) errors.fname = 'Required.';
@@ -24,12 +24,15 @@ route(...)
 	});
 */
 protocols.add('stdrel.com/crud-coll', function(route, cfg) {
-	var itemUrl = cfg.itemUrl || cfg.itemUri;
+	// Get item url
+	var itemLink = local.queryLinks(route.links, { rel: 'item' })[0];
+	if (!itemLink) throw "Must set a `rel=item` link with a `{id}` URI token.";
+	var itemUrl = itemLink.href; console.log(itemUrl);
 	var itemUrlTmpl = local.UriTemplate.parse(itemUrl);
 
 	// Set links
 	route.mixinLink('self', { rel: 'stdrel.com/crud-coll' });
-	route.link({ href: itemUrl, rel: 'item stdrel.com/crud-item' });
+	route.mixinLink('item', { rel: 'stdrel.com/crud-item' });
 
 	// Add behaviors
 	route.method('POST', function(req, res) {
@@ -47,7 +50,7 @@ protocols.add('stdrel.com/crud-coll', function(route, cfg) {
 
 		// Add to collection
 		return local.promise(cfg.add(req.body, req, res)).then(function (addedItem) {
-			var uri = itemUrlTmpl.expand(addedItem);
+			var uri = itemUrlTmpl.expand({ id: addedItem.id });
 			res.header('Location', uri);
 			return 201;
 		});

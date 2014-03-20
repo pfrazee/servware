@@ -3,9 +3,9 @@ var protocols = require('../protocols');
 // CRUD Item protocol, hosts a manipulable item within a collection
 /*
 route(...)
-	.link({ href: '/my-coll/{id}', rel: 'self' })
+	.link({ href: '/my-coll', rel: 'up' })
+	.link({ href: '/my-coll/:id', rel: 'self' })
 	.protocol('stdrel.com/crud-item', {
-		collUrl: '/my-coll',
 		validate: function(item, req, res) {
 			var errors = {};
 			if (!item.fname) errors.fname = 'Required.';
@@ -28,11 +28,9 @@ route(...)
 	});
 */
 protocols.add('stdrel.com/crud-item', function(route, cfg) {
-	var collUrl = cfg.collUrl || cfg.collUri;
-
 	// Set links
 	route.mixinLink('self', { rel: 'stdrel.com/crud-item' });
-	route.link({ href: collUrl, rel: 'up stdrel.com/crud-item' });
+	route.mixinLink('up', { rel: 'stdrel.com/crud-coll' });
 
 	// Add behaviors
 	route.method('GET', function(req, res) {

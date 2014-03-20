@@ -265,8 +265,8 @@ testserver.route('/protocol/transformer')
 var myitems = [];
 testserver.route('/protocol/crud-coll')
 	.link({ href: '/protocol/crud-coll', rel: 'self', title: 'My Collection' })
+	.link({ href: '/protocol/crud-coll/{id}', rel: 'item' })
 	.protocol('stdrel.com/crud-coll', {
-		itemUrl: '/protocol/crud-coll/{id}',
 		validate: function(item, req, res) {
 			var errors = {};
 			if (!item.fname) errors.fname = 'Required.';
@@ -284,9 +284,9 @@ testserver.route('/protocol/crud-coll')
 		}
 	});
 testserver.route('/protocol/crud-coll/:id')
+	.link({ href: '/protocol/crud-coll', rel: 'up' })
 	.link({ href: '/protocol/crud-coll/:id', rel: 'self' })
 	.protocol('stdrel.com/crud-item', {
-		collUrl: '/protocol/crud-coll',
 		validate: function(item, req, res) {
 			var errors = {};
 			if (!item.fname) errors.fname = 'Required.';
