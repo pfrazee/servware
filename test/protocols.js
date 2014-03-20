@@ -42,7 +42,10 @@ wait(function () { return done; });
 success
 {
   body: "<h1>Hello, world</h1>",
-  headers: {"content-type": "text/html"},
+  headers: {
+    "content-type": "text/html",
+    link: "</>; rel=\"self somewhere.com/rel/bar\"; title=\"My Bar Protocol\""
+  },
   reason: "OK",
   status: 200
 }

@@ -178,35 +178,35 @@ testserver.route('/reqassert', function(link, method) {
 	});
 });
 
-testserver.route('/links', function(link, method) {
-	link({ href: '/', rel: 'up via service', foo: 'bar' });
-	link({ href: '/link', rel: 'self service' });
-	link({ href: 'http://grimwire.com', rel: 'service', title: 'best site in world of web' });
-
-	method('ROUTELINKS', function(req, res) {
+testserver.route('/links')
+	.mixinLink('up', { rel: 'via' })
+	.link({ href: '/', rel: 'up service', foo: 'bar' })
+	.mixinLink('via', { foo: 'bar' })
+	.link({ href: '/link', rel: 'self service' })
+	.link({ href: 'http://httplocal.com', rel: 'service', title: 'best site in world of web' })
+	.method('ROUTELINKS', function(req, res) {
 		return 200;
-	});
-	method('METHODLINKS1', function(req, res) {
+	})
+	.method('METHODLINKS1', function(req, res) {
 		res.link({ href: '/foo', rel: 'item', title: 'method link' });
 		return 200;
-	});
-	method('METHODLINKS2', function(req, res) {
+	})
+	.method('METHODLINKS2', function(req, res) {
 		res.link({ href: '/bar', rel: 'item', title: 'method link 1' });
 		res.link({ href: '/baz', rel: 'item', title: 'method link 2' });
 		return 200;
-	});
-	method('MODLINKS1', function(req, res) {
+	})
+	.method('MODLINKS1', function(req, res) {
 		res.modlinks({ rel: 'service' }, { title: 'All titles are this' });
 		res.modlinks({ foo: 'bar' }, { foo: 'baz' });
 		return 200;
-	});
-	method('MODLINKS2', function(req, res) {
+	})
+	.method('MODLINKS2', function(req, res) {
 		res.modlinks({ rel: 'service' }, function(link) {
 			if (link.foo == 'bar') link.title = 'Just this title is this';
 		});
 		return 200;
 	});
-});
 
 testserver.route('/links/:foo/:bar', function(link, method) {
 	link({ href: '/:foo', rel: 'up via service', id: ':foo' });
@@ -224,6 +224,9 @@ testserver.route('/rel/foo').protocol('stdrel.com/rel', {
 testserver.route('/protocol/foo').protocol('test/rel/foo', { getMsg: 'Hello, world' });
 
 servware.protocols.add('somewhere.com/rel/bar', function(route, cfg) {
+	route.mixinLink('self', { rel: 'somewhere.com/rel/bar' });
 	route.method('GET', function() { return [200, cfg.getHtml, {'Content-Type': 'text/html'}]; });
 });
-testserver.route('/protocol/bar').protocol('somewhere.com/rel/bar', { getHtml: '<h1>Hello, world</h1>' });
+testserver.route('/protocol/bar')
+	.link({ href: '/', rel: 'self', title: 'My Bar Protocol' })
+	.protocol('somewhere.com/rel/bar', { getHtml: '<h1>Hello, world</h1>' });

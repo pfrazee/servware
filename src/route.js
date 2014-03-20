@@ -4,6 +4,7 @@ function Route(path, pathTokenMap) {
 	this.path = path;
 	this.pathTokenMap = pathTokenMap;
 	this.links = [];
+	this.linkMixins = [];
 	this.preMethods = {};
 	this.methods = {};
 	this.postMethods = {};
@@ -16,6 +17,14 @@ function Route(path, pathTokenMap) {
 // - linkObj: required object
 Route.prototype.link = function(linkObj) {
 	this.links.push(linkObj);
+	return this;
+};
+
+// Add a link mixin, to decorate links which are added via link()
+// - rel: required string, the reltypes to apply this to
+// - linkObj: required object
+Route.prototype.mixinLink = function(rel, linkObj) {
+	this.linkMixins.push([rel, linkObj]);
 	return this;
 };
 

@@ -228,6 +228,7 @@ function Route(path, pathTokenMap) {
 	this.path = path;
 	this.pathTokenMap = pathTokenMap;
 	this.links = [];
+	this.linkMixins = [];
 	this.preMethods = {};
 	this.methods = {};
 	this.postMethods = {};
@@ -240,6 +241,14 @@ function Route(path, pathTokenMap) {
 // - linkObj: required object
 Route.prototype.link = function(linkObj) {
 	this.links.push(linkObj);
+	return this;
+};
+
+// Add a link mixin, to decorate links which are added via link()
+// - rel: required string, the reltypes to apply this to
+// - linkObj: required object
+Route.prototype.mixinLink = function(rel, linkObj) {
+	this.linkMixins.push([rel, linkObj]);
 	return this;
 };
 
@@ -320,70 +329,96 @@ function servware() {
 		resMixin(res);
 
 		// Match the path
+		var route;
 		for (var i=0; i < routeRegexes.length; i++) {
 			var match = routeRegexes[i].exec(req.path);
 			if (!match) { continue; }
 
 			// Extract params
 			req.params = match.slice(1);
-			var route = routes[routeRegexes[i]];
-			var pathTokenMap = route.pathTokenMap;
-
-			// Match the method
-			var methodHandlers = route.methods[req.method];
-			if (!methodHandlers) { return res.writeHead(405, reasons[405]).end(); }
-
-			// Add pre/post methods
-			if (route.preMethods[req.method]) { methodHandlers = route.preMethods[req.method].concat(methodHandlers); }
-			if (route.postMethods[req.method]) { methodHandlers = methodHandlers.concat(route.postMethods[req.method]); }
-
-			// Add tokens to params
-			for (var k in pathTokenMap) {
-				req.params[pathTokenMap[k]] = req.params[k];
-			}
-
-			// Pull route links into response
-			if (route.links.length) {
-				res.setHeader('link', local.util.deepClone(route.links));
-			}
-
-			// Patch serializeHeaders() to replace path tokens
-			var orgSeralizeHeaders = res.serializeHeaders;
-			Object.defineProperty(res, 'serializeHeaders', { value: function() {
-				orgSeralizeHeaders.call(this);
-				if (!this.headers.link) return;
-				for (var k in pathTokenMap) {
-					var token = ':'+pathTokenMap[k];
-					this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
-				}
-			}, configurable: true });
-
-			// Define post-handler behavior
-			function handleReturn (resData) {
-				// Go to the next handler if given true (the middleware signal)
-				if (resData === true) {
-					handlerIndex++;
-					if (!methodHandlers[handlerIndex]) {
-						console.error('Route handler returned true but no further handlers were available');
-						return res.writeHead(500, reasons[500]).end();
-					}
-					local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
-				} else {
-					// Fill the response, if needed
-					if (resData) { writeResponse(res, resData); }
-				}
-			}
-
-			// If not streaming, wait for body; otherwise, go immediately
-			var handlerIndex = 0;
-			var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
-			p.then(function() {
-				// Run the handler
-				return methodHandlers[handlerIndex].apply(route, args);
-			}).always(handleReturn);
-			return;
+			route = routes[routeRegexes[i]];
+			break;
 		}
-		res.writeHead(404, reasons[404]).end();
+
+		// 404 if no match
+		if (!route) {
+			return res.writeHead(404, reasons[404]).end();
+		}
+		var pathTokenMap = route.pathTokenMap;
+
+		// Match the method
+		var methodHandlers = route.methods[req.method];
+		if (!methodHandlers) { return res.writeHead(405, reasons[405]).end(); }
+
+		// Add pre/post methods
+		if (route.preMethods[req.method]) { methodHandlers = route.preMethods[req.method].concat(methodHandlers); }
+		if (route.postMethods[req.method]) { methodHandlers = methodHandlers.concat(route.postMethods[req.method]); }
+
+		// Add tokens to params
+		for (var k in pathTokenMap) {
+			req.params[pathTokenMap[k]] = req.params[k];
+		}
+
+		// Pull route links into response
+		if (route.links.length) {
+			var links = local.util.deepClone(route.links);
+			// Apply mixins
+			route.linkMixins.forEach(function(item) {
+				var rel = item[0], props = item[1];
+				// Find target links
+				local.queryLinks(links, { rel: rel }).forEach(function(link) {
+					for (var k in props) {
+						// Is the value already set?
+						if (link[k]) {
+							// Combine if it's the rel
+							if (k == 'rel') {
+								link.rel += ' '+props[k];
+							}
+							// otherwise, ignore
+						} else {
+							// Set
+							link[k] = props[k];
+						}
+					}
+				});
+			});
+			res.setHeader('link', links);
+		}
+
+		// Patch serializeHeaders() to replace path tokens
+		var orgSeralizeHeaders = res.serializeHeaders;
+		Object.defineProperty(res, 'serializeHeaders', { value: function() {
+			orgSeralizeHeaders.call(this);
+			if (!this.headers.link) return;
+			for (var k in pathTokenMap) {
+				var token = ':'+pathTokenMap[k];
+				this.headers.link = this.headers.link.replace(RegExp(token, 'g'), req.params[k]);
+			}
+		}, configurable: true });
+
+		// Define post-handler behavior
+		function handleReturn (resData) {
+			// Go to the next handler if given true (the middleware signal)
+			if (resData === true) {
+				handlerIndex++;
+				if (!methodHandlers[handlerIndex]) {
+					console.error('Route handler returned true but no further handlers were available');
+					return res.writeHead(500, reasons[500]).end();
+				}
+				local.promise(true).then(function() { return methodHandlers[handlerIndex].apply(route, args); }).always(handleReturn);
+			} else {
+				// Fill the response, if needed
+				if (resData) { writeResponse(res, resData); }
+			}
+		}
+
+		// If not streaming, wait for body; otherwise, go immediately
+		var handlerIndex = 0;
+		var p = (!methodHandlers.stream) ? req.body_ : local.promise(true);
+		p.then(function() {
+			// Run the handler
+			return methodHandlers[handlerIndex].apply(route, args);
+		}).always(handleReturn);
 	};
 	serverFn.route = function(path, defineFn) {
 		var pathTokenMap = {}; // regex match index -> token name (eg {0: 'section', 1: 'id'})
@@ -412,7 +447,6 @@ function servware() {
 	return serverFn;
 }
 servware.protocols = protocols;
-servware.protos = protocols;
 
 function writeResponse(res, data) {
 	// Standardize data
